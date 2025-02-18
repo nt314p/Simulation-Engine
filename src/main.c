@@ -17,8 +17,8 @@
 #include "color.h"
 #include "physics.h"
 
-static const int WIDTH = 1280;
-static const int HEIGHT = 720;
+static const int WIDTH = 1920;
+static const int HEIGHT = 1080;
 
 static void ProcessInput(GLFWwindow* window, float deltaTime);
 
@@ -44,7 +44,7 @@ Surface s;
 
 GLFWwindow* Initialize()
 {
-    window = SimInitWindow(WIDTH, HEIGHT, "Viewer", false);
+    window = SimInitWindow(WIDTH, HEIGHT, "Viewer", true);
     if (window == NULL)
     {
         printf("Error!\n"); // TODO: handle this better
@@ -56,35 +56,41 @@ GLFWwindow* Initialize()
 
     int maxUBOSize;
     glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &maxUBOSize);
-    printf("Max uniform buffer size: %d\n", maxUBOSize);
+    printf("Max uniform buffer size: %d K\n", maxUBOSize / 1024);
 
-    CameraUsePerspective(45.0f, ((float)WIDTH) / HEIGHT, 0.1f, 50.0f);
+    int maxSSBOSize;
+    glGetIntegerv(GL_MAX_SHADER_STORAGE_BLOCK_SIZE, &maxSSBOSize);
+    printf("Max shader storage buffer size: %d K\n", maxSSBOSize / 1024);
+
+    CameraUsePerspective(45.0f, ((float)WIDTH) / HEIGHT, 0.1f, 400.0f);
     //CameraUseOrthographic(((float)WIDTH) / HEIGHT, 10.0f);
 
     vec3 origin = { 0, 0, 0 };
-    PolygonLine(origin, (vec3) { 1, 0, 0 }, COLOR_RED);
-    PolygonLine(origin, (vec3) { 0, 1, 0 }, COLOR_GREEN);
-    PolygonLine(origin, (vec3) { 0, 0, 1 }, COLOR_BLUE);
+    // PolygonLine(origin, (vec3) { 1, 0, 0 }, COLOR_RED);
+    // PolygonLine(origin, (vec3) { 0, 1, 0 }, COLOR_GREEN);
+    // PolygonLine(origin, (vec3) { 0, 0, 1 }, COLOR_BLUE);
 
-    int n = 21;
-    float scale = 0.3f;
-    float* surfaceData = malloc(n * n * 4 * sizeof(float));
-    for (int c = 0; c < n; c++)
+    int nX = 256;
+    int nY = 256;
+    double sizeX = 20;
+    double sizeY = 20;
+
+    float* surfaceData = malloc(nX * nY * 4 * sizeof(float));
+    for (int c = 0; c < nY; c++)
     {
-        for (int r = 0; r < n; r++)
+        for (int r = 0; r < nX; r++)
         {
-            float x = r - n / 2;
-            float y = c - n / 2;
-            x *= scale;
-            y *= scale;
-            float height = 10 * x * y / (expf(x * x + y * y));
-            int vertIndex = r + n * c;
+            double x = sizeX * (r / (nX - 1.0)) - sizeX / 2.0;
+            double y = sizeY * (c / (nY - 1.0)) - sizeY / 2.0;
+
+            float height = sin(0.5 * (x * x + y * y));// * (sin(x + y) + cos(x - y));//10 * x * y / (expf(x * x + y * y));
+            int vertIndex = r + nX * c;
             surfaceData[vertIndex * 4 + 0] = height;
             glm_vec3_copy(COLOR_FLORALWHITE, &surfaceData[vertIndex * 4 + 1]);
         }
     }
 
-    SurfaceInitialize(&s, (vec3) { -n / 2, 0, -n / 2 }, 1.0f, surfaceData, n);
+    SurfaceInitialize(&s, surfaceData, (vec2) { sizeX, sizeY }, (vec3) { 0, 0, 0 }, (ivec2) { nX, nY });
 
     startTime = glfwGetTime();
     lastFPSUpdate = startTime;

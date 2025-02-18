@@ -3,7 +3,9 @@
 #include "input.h"
 #include "debug.h"
 
-static vec2 MouseCoords; // In normalized upright axis [-1, 1]
+
+static vec2 MouseCoords; // Screen space coordinates (+x axis = right; +y axis = down)
+static vec2 MouseViewCoords; // In normalized upright axis [-1, 1]
 static vec2 MouseDelta; // In pixels per frame
 static vec2 ScrollDelta;
 
@@ -18,15 +20,33 @@ static void ScrollCallback(GLFWwindow* window, double deltaX, double deltaY)
 
 static void MouseCallback(GLFWwindow* window, double x, double y)
 {
-    static float prevX, prevY;
+    static double prevX, prevY;
     static bool firstCall = true;
+    static double originX = 0;
+    static double originY = 0;
+    /*
+    Since using GLFW_CURSOR_DISABLED causes infinite movement, we use an offset
+    origin to define a rectanglular screen. Whenever the cursor moves outside
+    this rectangle, we move the origin so the rectangle always contains the origin.
+    The screenspace coordinates are then defined by the mouse's position within
+    this rectangle.
 
-    float xScaled = x / (WindowWidth - 1);
-    float yScaled = y /-(WindowHeight - 1); // Assumes height is smaller than width
+    We continue to use the raw coordinates to compute the mouse delta.
+    */
 
+    if (x < originX) originX = x;
+    if (y < originY) originY = y;
+    if (x > originX + WindowWidth - 1) originX = x - (WindowWidth - 1);
+    if (y > originY + WindowHeight - 1) originY = y - (WindowHeight - 1);
 
-    xScaled = 2 * xScaled - 1;
-    yScaled = 2 * yScaled + 1;
+    float xReal = x - originX;
+    float yReal = y - originY;
+
+    float xView = xReal / (WindowWidth - 1);
+    float yView = yReal / -(WindowHeight - 1); // Assumes height is smaller than width
+
+    xView = 2 * xView - 1;
+    yView = 2 * yView + 1;
 
     if (firstCall)
     {
@@ -41,8 +61,10 @@ static void MouseCallback(GLFWwindow* window, double x, double y)
     prevX = x;
     prevY = y;
 
-    MouseCoords[0] = xScaled; // TODO: what are these units?
-    MouseCoords[1] = yScaled;
+    MouseViewCoords[0] = xView;
+    MouseViewCoords[1] = yView;
+    MouseCoords[0] = xReal;
+    MouseCoords[1] = yReal;
     MouseDelta[0] = dx;
     MouseDelta[1] = dy;
 }
@@ -61,9 +83,16 @@ void InputMouseDelta(vec2 mouseDelta)
     glm_vec2_copy(MouseDelta, mouseDelta);
 }
 
+// Returns the mouse coordinates in screen space [0, W - 1] x [0, H - 1]
 void InputMouseCoords(vec2 mouseCoords)
 {
     glm_vec2_copy(MouseCoords, mouseCoords);
+}
+
+// Returns the mouse coordinates in view space [-1, 1] x [-1, 1]
+void InputMouseViewCoords(vec2 mouseViewCoords)
+{
+    glm_vec2_copy(MouseCoords, mouseViewCoords);
 }
 
 void InputScrollDelta(vec2 scrollDelta)

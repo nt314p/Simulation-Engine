@@ -6,6 +6,7 @@
 void InputInitialize(GLFWwindow* window);
 void InputMouseDelta(vec2 mouseDelta);
 void InputMouseCoords(vec2 mouseCoords);
+void InputMouseViewCoords(vec2 mouseViewCoords);
 void InputScrollDelta(vec2 scrollDelta);
 void InputGetAxes2D(GLFWwindow* window, vec2 axisInput);
 void InputGetAxes3D(GLFWwindow* window, vec3 axisInput);

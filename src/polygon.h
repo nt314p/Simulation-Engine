@@ -51,16 +51,15 @@ typedef struct Point
 
 // Represents some z = f(x, y)
 // The grid is n x n
-// TODO: refactor this to redefine the origin to the center of the surface
 // Instead of scale, allow the user to define a surface width dimension
 // TODO: allow for rectangular domains instead of just square
 typedef struct Surface
 {
-    vec3 origin; // The coordinates of the top left corner in world space
-    float scale; // The spacing between subsequent elements in the grid
     float* vertices; // Vertex data (height, r, g, b). (x, y) -> vertices[x + y * n]
+    ivec2 numPoints; // The number of points along the (x-axis, y-axis)
+    vec2 dimensions; // The dimensions of the surface (width, height)
+    vec3 origin; // The coordinates of the surface center in world space
     VertexArray vertexArray;
-    uint32_t n; // The number of elements along each dimension
 } Surface;
 
 // Initializes polygons; must be called before other functions
@@ -92,7 +91,7 @@ Line* PolygonLines(unsigned int count);
 
 // TODO: methods for getting point objects
 
-void SurfaceInitialize(Surface* surface, vec3 origin, float scale, float* data, uint32_t n);
+void SurfaceInitialize(Surface* surface, float* data, vec2 dimensions, vec3 origin, ivec2 numPoints);
 
 void SurfaceDraw(Surface* surface);
 

@@ -274,13 +274,18 @@ Line* PolygonLines(unsigned int count)
     return ls;
 }
 
-void SurfaceInitialize(Surface* surface, vec3 origin, float scale, float* data, uint32_t n)
+void SurfaceInitialize(Surface* surface, float* data, vec2 dimensions, vec3 origin, ivec2 numPoints)
 {
+    glm_vec2_copy(dimensions, surface->dimensions);
     glm_vec3_copy(origin, surface->origin);
-    surface->scale = scale;
-    surface->n = n;
 
-    int dataSize = sizeof(vec4) * n * n;
+    int nX = numPoints[0];
+    int nY = numPoints[1];
+
+    surface->numPoints[0] = nX;
+    surface->numPoints[1] = nY;
+
+    int dataSize = sizeof(vec4) * nX * nY;
     surface->vertices = data;
 
     VertexArray* va = &surface->vertexArray;
@@ -292,10 +297,10 @@ void SurfaceInitialize(Surface* surface, vec3 origin, float scale, float* data, 
     VertexAttribPointerFloats(0, 1, 16); // height
     VertexAttribPointerFloats(1, 3, 16); // color rgb
 
-    // An n x n grid contains (n - 1) x (n - 1) squares.
-    // So we need 2 * (n - 1) * (n - 1) triangles,
-    // which have 3 * 2 * (n - 1) * (n - 1) vertices.
-    int numVertices = 3 * 2 * (n - 1) * (n - 1);
+    // An nX x nY grid contains (nX - 1) x (nY - 1) squares.
+    // So we need 2 * (nX - 1) * (nY - 1) triangles,
+    // which have 3 * 2 * (nX - 1) * (nY - 1) vertices.
+    int numVertices = 3 * 2 * (nX - 1) * (nY - 1);
     unsigned int* indexData = malloc(sizeof(unsigned int) * numVertices);
 
     /* Triangulation
@@ -308,21 +313,37 @@ void SurfaceInitialize(Surface* surface, vec3 origin, float scale, float* data, 
     */
 
     int vertIndex = 0;
-    for (int x = 0; x < n - 1; x++)
+    for (int x = 0; x < nX - 1; x++)
     {
-        for (int y = 0; y < n - 1; y++)
+        for (int y = 0; y < nY - 1; y++)
         {
-            int a = x + y * n;
+            int a = x + y * nX;
             int b = a + 1;
-            int c = a + n;
+            int c = a + nX;
             int d = c + 1;
             indexData[vertIndex + 0] = a; // top left tri
             indexData[vertIndex + 1] = b;
-            indexData[vertIndex + 2] = c;
+            if ((x + y) % 2 == 0) // Alternative triangulation, removes artifacts??
+            {
+                indexData[vertIndex + 2] = c;
+            }
+            else
+            {
+                indexData[vertIndex + 2] = d;
+            }
+            //indexData[vertIndex + 2] = c;
 
-            indexData[vertIndex + 3] = b; // bottom right tri
-            indexData[vertIndex + 4] = d;
-            indexData[vertIndex + 5] = c;
+            indexData[vertIndex + 3] = d; // bottom right tri
+            indexData[vertIndex + 4] = c;
+            //indexData[vertIndex + 5] = a;
+            if ((x + y) % 2 == 0)
+            {
+                indexData[vertIndex + 5] = b;
+            }
+            else
+            {
+                indexData[vertIndex + 5] = a;
+            }
             vertIndex += 6;
         }
     }
@@ -341,8 +362,8 @@ void SurfaceDraw(Surface* surface)
     ShaderUse(surfaceShaderId);
 
     GLCall(glUniform3f(glGetUniformLocation(surfaceShaderId, "origin"), surface->origin[0], surface->origin[1], surface->origin[2]));
-    GLCall(glUniform1f(glGetUniformLocation(surfaceShaderId, "scale"), surface->scale));
-    GLCall(glUniform1i(glGetUniformLocation(surfaceShaderId, "n"), surface->n));
+    GLCall(glUniform2f(glGetUniformLocation(surfaceShaderId, "dimensions"), surface->dimensions[0], surface->dimensions[1]));
+    GLCall(glUniform2i(glGetUniformLocation(surfaceShaderId, "numPoints"), surface->numPoints[0], surface->numPoints[1]));
 
     VertexArrayBind(va);
     GLCall(glDrawElements(GL_TRIANGLES, va->indexBufferCount, GL_UNSIGNED_INT, 0))
