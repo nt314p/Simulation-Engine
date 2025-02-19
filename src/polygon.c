@@ -15,16 +15,18 @@ static const int VerticesPerLine = 2;
 static const int VerticesPerRect = 4;
 
 static const char* BasicFragShaderPath = "shaders/BasicFrag.frag";
-static const char* RectVertShaderPath = "shaders/InstancedRect.vert";
 static const char* CircleVertShaderPath = "shaders/InstancedCircle.vert";
-static const char* Line2DVertShaderPath = "shaders/InstancedLine2D.vert";
+static const char* RectVertShaderPath = "shaders/InstancedRect.vert";
 static const char* LineVertShaderPath = "shaders/InstancedLine.vert";
+static const char* Line2DVertShaderPath = "shaders/InstancedLine2D.vert";
 static const char* PointVertShaderPath = "shaders/InstancedPoint.vert";
 static const char* SurfaceVertShaderPath = "shaders/Surface.vert";
 
-static VertexArray UnitCircleVertexArray;
-static VertexArray UnitSquareVertexArray;
-static VertexArray PointVertexArray;
+static InstancedObject instancedCircle;
+static InstancedObject instancedRect;
+static InstancedObject instancedLine;
+static InstancedObject instancedLine2D;
+static InstancedObject instancedPoint;
 
 static bool IsInitialized = false;
 
@@ -32,38 +34,18 @@ static bool IsInitialized = false;
 
 static const int MaxCircleCount = 2048;
 static const int MaxRectCount = 2048;
-static const int MaxLine2DCount = 2048;
 static const int MaxLineCount = 1024;
+static const int MaxLine2DCount = 2048;
 static const int MaxPointCount = 2048;
-
-static Circle* circles;
-static Rect* rects;
-static Line2D* line2Ds;
-static Line* lines;
-static Point* points;
-
-static UniformBuffer circlesBuffer;
-static UniformBuffer rectsBuffer;
-static UniformBuffer line2DsBuffer;
-static UniformBuffer linesBuffer;
-
-static unsigned int numCircles;
-static unsigned int numRects;
-static unsigned int numLine2Ds;
-static unsigned int numLines;
-static unsigned int numPoints;
 
 static mat4 vpMatrix;
 static UniformBuffer vpMatrixUB;
 
-static unsigned int circleShaderId;
-static unsigned int rectShaderId;
-static unsigned int line2DShaderId;
-static unsigned int lineShaderId;
-static unsigned int pointShaderId;
 static unsigned int surfaceShaderId;
 
-static void InitializeUnitCircle()
+// Initializes vertices forming a tessellated unit circle
+// `vertData` should hold `3 * CircleTriangles` `vec2`s
+static void GenerateUnitCircleVertices(float* vertData)
 {
     vec2 vertLookup[CircleVertexCount];
 
@@ -75,205 +57,193 @@ static void InitializeUnitCircle()
         vertLookup[i][1] = sinf(angle);
     }
 
-    // printf("CircleVertexCount: %d\n", CircleVertexCount);
-    // printf("CircleTriangles: %d\n", CircleTriangles);
+    vec2* vertDataVec2 = (vec2*)vertData;
 
-    vec2* vertData = malloc(sizeof(vec2) * CircleTriangles * 3);
     int globalIndex = 0;
 
     // render n = 4 levels
     // vertex count = 3 * 2^n = 3 * 2^4 = 48
-
     for (int n = 0; n <= MaxCircleGenLevel; n++) {
         int triangleCount = n == 0 ? 1 : 3 * (1 << (n - 1));
         int stride = 1 << (MaxCircleGenLevel - n);
-        // printf("triangleCount: %d\n", triangleCount);
-        // printf("stride: %d\n", stride);
 
         for (int i = 0; i < triangleCount; i++)
         {
             int vIndex = i * stride * 2; // base vertex index in lookup
 
-            glm_vec2_copy(vertLookup[vIndex], vertData[globalIndex]);
-            glm_vec2_copy(vertLookup[vIndex + stride], vertData[globalIndex + 1]);
-            glm_vec2_copy(vertLookup[(vIndex + 2 * stride) % CircleVertexCount], vertData[globalIndex + 2]);
+            glm_vec2_copy(vertLookup[vIndex], vertDataVec2[globalIndex]);
+            glm_vec2_copy(vertLookup[vIndex + stride], vertDataVec2[globalIndex + 1]);
+            glm_vec2_copy(vertLookup[(vIndex + 2 * stride) % CircleVertexCount], vertDataVec2[globalIndex + 2]);
 
-            // printf("%d, %d, %d\n", vertexIndex, vertexIndex + stride, (vertexIndex + 2 * stride) % CircleVertexCount);
             globalIndex += 3;
         }
+    }    
+}
+
+// Initializes an instanced object. Be sure to also call `InstancedObjectInializeVertices`
+static void InstancedObjectInitialize(InstancedObject* object, const char* vertShaderPath, unsigned int maxCount, unsigned int objectSize, UniformBuffer* vpMatrix)
+{
+    unsigned int shaderId = ShaderCreate(vertShaderPath, BasicFragShaderPath);
+    object->shaderId = shaderId;
+    object->MaxObjectCount = maxCount;
+    object->size = objectSize;
+
+    unsigned int bufferSize = maxCount * objectSize;
+    object->objects = calloc(maxCount, objectSize);
+
+    UniformBufferInitialize(&object->instanceDataBuffer, object->objects, bufferSize, GL_DYNAMIC_DRAW);
+    ShaderBindUniformBuffer(shaderId, "Objects", &object->instanceDataBuffer);
+    ShaderBindUniformBuffer(shaderId, "Matrices", vpMatrix);
+}
+
+// This technically can be combined with the previous call, but it was getting too long!
+// If `vertices` is null, this indicates the instanced object requires no vertex data
+// to render. The `floatsPerVertex` parameter is ignored but `verticesPerObject` parameter is
+// still required.
+static void InstancedObjectInitializeVertices(InstancedObject* object, float* vertices, int verticesPerObject, int floatsPerVertex, GLenum mode)
+{
+    object->mode = mode;
+    object->verticesPerObject = verticesPerObject;
+
+    VertexArrayInitialize(&object->vao);
+
+    if (vertices)
+    {
+        VertexArrayBind(&object->vao);
+        VertexBufferInitialize(&object->vao, vertices, verticesPerObject * floatsPerVertex * sizeof(float), GL_STATIC_DRAW);
+        VertexAttribPointerFloats(0, floatsPerVertex, floatsPerVertex * sizeof(float));
     }
-
-    VertexArrayInitialize(&UnitCircleVertexArray);
-    VertexArrayBind(&UnitCircleVertexArray);
-
-    VertexBufferInitialize(&UnitCircleVertexArray, vertData,
-        sizeof(vec2) * CircleTriangles * 3, GL_STATIC_DRAW);
-
-    VertexAttribPointerFloats(0, 2, 8);
-
-    VertexArrayUnbind();
-    free(vertData);
-}
-
-// Initializes a unit square (side length one) centered at the origin
-static void InitializeUnitSquare()
-{
-    vec2 UnitSquareVertices[4];
-
-    glm_vec2_copy((vec2) { 0.5f, 0.5f }, UnitSquareVertices[0]);
-    glm_vec2_copy((vec2) { -0.5f, 0.5f }, UnitSquareVertices[1]);
-    glm_vec2_copy((vec2) { -0.5f, -0.5f }, UnitSquareVertices[2]);
-    glm_vec2_copy((vec2) { 0.5f, -0.5f }, UnitSquareVertices[3]);
-
-    VertexArrayInitialize(&UnitSquareVertexArray);
-    VertexArrayBind(&UnitSquareVertexArray);
-
-    VertexBufferInitialize(&UnitSquareVertexArray, UnitSquareVertices,
-        sizeof(UnitSquareVertices), GL_STATIC_DRAW);
-
-    VertexAttribPointerFloats(0, 2, 8);
-
-    VertexArrayUnbind();
-}
-
-static void InitializePointVertexArray()
-{
-    VertexArrayInitialize(&PointVertexArray);
-    VertexArrayBind(&PointVertexArray);
-
-    VertexBufferInitialize(&PointVertexArray, points, sizeof(Point) * MaxPointCount, GL_DYNAMIC_DRAW);
-    VertexAttribPointerFloats(0, 3, 32); // vec3 position
-    VertexAttribPointerFloats(1, 1, 32); // float pointSize
-    VertexAttribPointerFloats(2, 3, 32); // vec3 color
 
     VertexArrayUnbind();
 }
 
 void PolygonInitialize()
 {
-    InitializeUnitCircle();
-    InitializeUnitSquare();
-
-    // Initialize primitive buffers
-    int circlesSize = sizeof(Circle) * MaxCircleCount;
-    int rectsSize = sizeof(Rect) * MaxRectCount;
-    int line2DsSize = sizeof(Line2D) * MaxLine2DCount;
-    int linesSize = sizeof(Line) * MaxLineCount;
-    int pointsSize = sizeof(Point) * MaxPointCount;
-
-    circles = malloc(circlesSize);
-    rects = malloc(rectsSize);
-    line2Ds = malloc(line2DsSize);
-    lines = malloc(linesSize);
-    points = malloc(pointsSize);
-
-    memset(circles, 0, circlesSize);
-    memset(rects, 0, rectsSize);
-    memset(line2Ds, 0, line2DsSize);
-    memset(lines, 0, linesSize);
-    memset(points, 0, pointsSize);
-
-    InitializePointVertexArray(); // requires that `points` points to valid memory
-
-    UniformBufferInitialize(&circlesBuffer, circles, circlesSize, GL_DYNAMIC_DRAW);
-    UniformBufferInitialize(&rectsBuffer, rects, rectsSize, GL_DYNAMIC_DRAW);
-    UniformBufferInitialize(&line2DsBuffer, line2Ds, line2DsSize, GL_DYNAMIC_DRAW);
-    UniformBufferInitialize(&linesBuffer, lines, linesSize, GL_DYNAMIC_DRAW);
-
-    rectShaderId = ShaderCreate(RectVertShaderPath, BasicFragShaderPath);
-    circleShaderId = ShaderCreate(CircleVertShaderPath, BasicFragShaderPath);
-    line2DShaderId = ShaderCreate(Line2DVertShaderPath, BasicFragShaderPath);
-    lineShaderId = ShaderCreate(LineVertShaderPath, BasicFragShaderPath);
-    pointShaderId = ShaderCreate(PointVertShaderPath, BasicFragShaderPath);
-    surfaceShaderId = ShaderCreate(SurfaceVertShaderPath, BasicFragShaderPath);
-
     UniformBufferInitialize(&vpMatrixUB, vpMatrix, sizeof(mat4), GL_DYNAMIC_DRAW);
-    ShaderBindUniformBuffer(rectShaderId, "Matrices", &vpMatrixUB);
-    ShaderBindUniformBuffer(circleShaderId, "Matrices", &vpMatrixUB);
-    ShaderBindUniformBuffer(line2DShaderId, "Matrices", &vpMatrixUB);
-    ShaderBindUniformBuffer(lineShaderId, "Matrices", &vpMatrixUB);
-    ShaderBindUniformBuffer(pointShaderId, "Matrices", &vpMatrixUB);
+
+    float* circleVertices = malloc(sizeof(vec2) * CircleTriangles * 3);
+    GenerateUnitCircleVertices(circleVertices);
+    InstancedObjectInitialize(&instancedCircle, CircleVertShaderPath, MaxCircleCount, sizeof(Circle), &vpMatrixUB);
+    InstancedObjectInitializeVertices(&instancedCircle, circleVertices, 3 * CircleTriangles, 2, GL_TRIANGLES);
+    free(circleVertices);
+
+    // Unit square of side length 1 centered at the origin
+    float unitSquareVertices[8] = { 0.5f, 0.5f , -0.5f, 0.5f , -0.5f, -0.5f , 0.5f, -0.5f };
+    InstancedObjectInitialize(&instancedRect, RectVertShaderPath, MaxRectCount, sizeof(Rect), &vpMatrixUB);
+    InstancedObjectInitializeVertices(&instancedRect, unitSquareVertices, VerticesPerRect, 2, GL_TRIANGLE_FAN);
+
+    InstancedObjectInitialize(&instancedLine, LineVertShaderPath, MaxLineCount, sizeof(Line), &vpMatrixUB);
+    InstancedObjectInitializeVertices(&instancedLine, NULL, VerticesPerLine, 0, GL_LINES);
+
+    InstancedObjectInitialize(&instancedLine2D, Line2DVertShaderPath, MaxLine2DCount, sizeof(Line2D), &vpMatrixUB);
+    InstancedObjectInitializeVertices(&instancedLine2D, NULL, VerticesPerLine, 0, GL_LINES);
+
+    InstancedObjectInitialize(&instancedPoint, PointVertShaderPath, MaxPointCount, sizeof(Point), &vpMatrixUB);
+    InstancedObjectInitializeVertices(&instancedPoint, NULL, 1, 0, GL_POINTS);
+
+    surfaceShaderId = ShaderCreate(SurfaceVertShaderPath, BasicFragShaderPath);
     ShaderBindUniformBuffer(surfaceShaderId, "Matrices", &vpMatrixUB);
 
-    ShaderBindUniformBuffer(circleShaderId, "Circles", &circlesBuffer);
-    ShaderBindUniformBuffer(rectShaderId, "Rectangles", &rectsBuffer);
-    ShaderBindUniformBuffer(line2DShaderId, "Lines", &line2DsBuffer);
-    ShaderBindUniformBuffer(lineShaderId, "Lines", &linesBuffer);
+    GLCall(glEnable(GL_VERTEX_PROGRAM_POINT_SIZE));
 
     IsInitialized = true;
 }
 
+// Returns `count` contiguous instances of the passed `InstancedObject`
+static void* InstancedObjectAllocate(InstancedObject* object, unsigned int count)
+{
+    void* objs = ((uint8_t*)object->objects) + object->count * object->size;
+    object->count += count;
+    return objs;
+}
+
+// Draws all instanced objects if there are any
+static void InstancedObjectDraw(InstancedObject* object)
+{
+    if (object->count == 0) return;
+    UniformBufferUpdateRange(&object->instanceDataBuffer, 0, object->size * object->count);
+    ShaderUse(object->shaderId);
+    VertexArrayBind(&object->vao);
+    GLCall(glDrawArraysInstanced(object->mode, 0, object->verticesPerObject, object->count));
+}
+
 Circle* PolygonCircle(vec2 position, float radius, vec3 color)
 {
-    Circle* c = circles + numCircles;
+    Circle* c = InstancedObjectAllocate(&instancedCircle, 1);
     glm_vec2_copy(position, c->position);
     c->radius = radius;
     glm_vec3_copy(color, c->color);
-    numCircles++;
+
     return c;
 }
 
 Circle* PolygonCircles(unsigned int count)
 {
-    Circle* cs = circles + numCircles;
-    numCircles += count;
-    return cs;
+    return InstancedObjectAllocate(&instancedCircle, count);
 }
 
 Rect* PolygonRect(vec2 position, float width, float height, vec3 color)
 {
-    Rect* r = rects + numRects;
+    Rect* r = InstancedObjectAllocate(&instancedRect, 1);
     glm_vec2_copy(position, r->position);
     r->width = width;
     r->height = height;
     glm_vec3_copy(color, r->color);
-    numRects++;
+
     return r;
 }
 
 Rect* PolygonRects(unsigned int count)
 {
-    Rect* rs = rects + numRects;
-    numRects += count;
-    return rs;
+    return InstancedObjectAllocate(&instancedRect, count);
 }
 
 Line2D* PolygonLine2D(vec2 a, vec2 b, vec3 color)
 {
-    Line2D* l = line2Ds + numLine2Ds;
+    Line2D* l = InstancedObjectAllocate(&instancedLine2D, 1);
     glm_vec2_copy(a, l->a);
     glm_vec2_copy(b, l->b);
-
     glm_vec3_copy(color, l->color);
-    numLine2Ds++;
+
     return l;
 }
 
 Line2D* PolygonLine2Ds(unsigned int count)
 {
-    Line2D* ls = line2Ds + numLine2Ds;
-    numLine2Ds += count;
-    return ls;
+    return InstancedObjectAllocate(&instancedLine2D, count);
 }
 
 Line* PolygonLine(vec3 a, vec3 b, vec3 color)
 {
-    Line* l = lines + numLines;
+    Line* l = InstancedObjectAllocate(&instancedLine, 1);
     glm_vec3_copy(a, l->a);
     glm_vec3_copy(b, l->b);
-
     glm_vec3_copy(color, l->color);
-    numLines++;
+
     return l;
 }
 
 Line* PolygonLines(unsigned int count)
 {
-    Line* ls = lines + numLines;
-    numLines += count;
-    return ls;
+    return InstancedObjectAllocate(&instancedLine, count);
 }
 
+Point* PolygonPoint(vec3 position, float pointSize, vec3 color)
+{
+    Point* p = InstancedObjectAllocate(&instancedPoint, 1);
+    glm_vec3_copy(position, p->position);
+    p->pointSize = pointSize;
+    glm_vec3_copy(color, p->color);
+
+    return p;
+}
+
+Point* PolygonPoints(unsigned int count)
+{
+    return InstancedObjectAllocate(&instancedPoint, count);
+}
+
+// TODO: improve tessellation: https://skytiger.wordpress.com/2010/11/28/xna-large-terrain/
 void SurfaceInitialize(Surface* surface, float* data, vec2 dimensions, vec3 origin, ivec2 numPoints)
 {
     glm_vec2_copy(dimensions, surface->dimensions);
@@ -369,76 +339,17 @@ void SurfaceDraw(Surface* surface)
     GLCall(glDrawElements(GL_TRIANGLES, va->indexBufferCount, GL_UNSIGNED_INT, 0))
 }
 
-static void DrawCircles()
-{
-    UniformBufferUpdateRange(&circlesBuffer, 0, sizeof(Circle) * numCircles);
-    ShaderUse(circleShaderId);
-    VertexArrayBind(&UnitCircleVertexArray);
-    GLCall(glDrawArraysInstanced(GL_TRIANGLES, 0, CircleTriangles * 3, numCircles));
-}
-
-static void DrawRects()
-{
-    UniformBufferUpdateRange(&rectsBuffer, 0, sizeof(Rect) * numRects);
-    ShaderUse(rectShaderId);
-    VertexArrayBind(&UnitSquareVertexArray);
-    GLCall(glDrawArraysInstanced(GL_TRIANGLE_FAN, 0, VerticesPerRect, numRects));
-}
-
-static void DrawLine2Ds()
-{
-    UniformBufferUpdateRange(&line2DsBuffer, 0, sizeof(Line2D) * numLine2Ds);
-    ShaderUse(line2DShaderId);
-    VertexArrayBind(&UnitSquareVertexArray); // why do we bind unit square for lines??
-    GLCall(glDrawArraysInstanced(GL_LINES, 0, VerticesPerLine, numLine2Ds));
-}
-
-static void DrawLines()
-{
-    UniformBufferUpdateRange(&linesBuffer, 0, sizeof(Line) * numLines);
-    ShaderUse(lineShaderId);
-    VertexArrayBind(&UnitSquareVertexArray); // why do we bind unit square for lines??
-    GLCall(glDrawArraysInstanced(GL_LINES, 0, VerticesPerLine, numLines));
-}
-
-static void DrawPoints()
-{
-    VertexBufferUpdateRange(&PointVertexArray, 0, sizeof(Point) * numPoints);
-    ShaderUse(pointShaderId);
-    VertexArrayBind(&PointVertexArray);
-    GLCall(glDrawArrays(GL_POINT, 0, numPoints)); // TODO: `glEnable(GL_VERTEX_PROGRAM_POINT_SIZE)` somewhere
-}
-
-void PolygonRenderPolygons()
-{
-    if (numRects > 0)
-    {
-        DrawRects();
-    }
-
-    if (numCircles > 0)
-    {
-        DrawCircles();
-    }
-
-    if (numLine2Ds > 0)
-    {
-        DrawLine2Ds();
-    }
-
-    if (numLines > 0)
-    {
-        DrawLines();
-    }
-
-    if (numPoints > 0)
-    {
-        DrawPoints();
-    }
-}
-
 void PolygonUpdateViewPerspectiveMatrix(mat4 m)
 {
     glm_mat4_copy(m, vpMatrix);
     UniformBufferUpdate(&vpMatrixUB);
+}
+
+void PolygonRenderPolygons()
+{
+    InstancedObjectDraw(&instancedCircle);
+    InstancedObjectDraw(&instancedRect);
+    InstancedObjectDraw(&instancedLine);
+    InstancedObjectDraw(&instancedLine2D);
+    InstancedObjectDraw(&instancedPoint);
 }

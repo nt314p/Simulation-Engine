@@ -5,13 +5,13 @@
 
 typedef struct VertexArray
 {
+    void* vertexBufferData;
     unsigned int vertexBufferId;
     unsigned int vertexBufferSize;
-    void* vertexBufferData;
-
+    
+    unsigned int* indexBufferData;
     unsigned int indexBufferId;
     unsigned int indexBufferCount; // If zero, the index buffer has not been initialized
-    unsigned int* indexBufferData;
 
     unsigned int id;
 } VertexArray;

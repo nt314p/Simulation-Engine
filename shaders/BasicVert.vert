@@ -12,5 +12,5 @@ out vec3 vColor;
 void main()
 {
    gl_Position = vpMatrix * vec4(position, 1.0);
-   vColor = 
+   vColor = vec4(1.0, 1.0, 1.0, 1.0);
 };

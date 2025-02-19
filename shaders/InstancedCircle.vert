@@ -10,7 +10,7 @@ struct Circle
     float padding2;
 };
 
-layout (std140) uniform Circles
+layout (std140) uniform Objects
 {
     Circle circles[2048];
 };

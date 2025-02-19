@@ -1,19 +1,28 @@
 #version 330 core
 
-layout(location = 0) in vec3 inPosition;
-layout(location = 1) in float inPointSize;
-layout(location = 2) in vec3 inColor;
+struct Point
+{
+    vec4 color;
+    vec3 position;
+    float pointSize;
+};
 
-out vec3 vColor;
+layout (std140) uniform Objects
+{
+    Point points[2048];
+};
 
 layout (std140) uniform Matrices
 {
     mat4 vpMatrix;
 };
 
+out vec3 vColor;
+
 void main() 
 {
-    gl_Position = vpMatrix * vec4(inPosition, 1.0);
-    gl_PointSize = inPointSize;
-    vColor = inColor;
+    Point point = points[gl_InstanceID];
+    gl_Position = vpMatrix * vec4(point.position, 1.0);
+    gl_PointSize = point.pointSize;
+    vColor = point.color.rgb;
 };

@@ -7,7 +7,7 @@ struct Line2D
     vec2 b; // endpoint b
 };
 
-layout (std140) uniform Lines
+layout (std140) uniform Objects
 {
     Line2D lines[2048];
 };

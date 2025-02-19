@@ -9,7 +9,7 @@ struct Line
     float padding;
 };
 
-layout (std140) uniform Lines
+layout (std140) uniform Objects
 {
     Line lines[1024];
 };

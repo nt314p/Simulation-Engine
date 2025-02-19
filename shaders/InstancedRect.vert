@@ -10,7 +10,7 @@ struct Rectangle
     float height;
 };
 
-layout (std140) uniform Rectangles
+layout (std140) uniform Objects
 {
     Rectangle rectangles[2048];
 };

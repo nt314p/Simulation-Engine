@@ -5,6 +5,23 @@
 #include <cglm\cglm.h>
 #include "renderer.h"
 
+/* Represents a generic collection of instanced objects.
+It uses a vertex buffer to hold vertices, and a 
+uniform buffer to hold per instance data
+*/
+typedef struct InstancedObject
+{
+    unsigned int MaxObjectCount;
+    unsigned int count; // How many objects currently are instantiated
+    unsigned int size; // The size of the object in bytes
+    unsigned int shaderId;
+    unsigned int verticesPerObject;
+    GLenum mode; // The mode to render for the draw call (GL_POINTS, GL_LINES, GL_TRIANGLES, etc)
+    VertexArray vao;
+    UniformBuffer instanceDataBuffer;
+    void* objects;
+} InstancedObject;
+
 typedef struct Circle
 {
     vec3 color;
@@ -43,10 +60,10 @@ typedef struct Line
 
 typedef struct Point
 {
-    vec3 position;
-    float pointSize;
     vec3 color;
     float padding;
+    vec3 position;
+    float pointSize;
 } Point;
 
 // Represents some z = f(x, y)
@@ -89,7 +106,11 @@ Line* PolygonLine(vec3 a, vec3 b, vec3 color);
 // Allocates `count` contiguous lines and returns a pointer
 Line* PolygonLines(unsigned int count);
 
-// TODO: methods for getting point objects
+// Initializes a point and returns its pointer
+Point* PolygonPoint(vec3 position, float pointSize, vec3 color);
+
+// Allocates `count` contiguous points and returns a pointer
+Point* PolygonPoints(unsigned int count);
 
 void SurfaceInitialize(Surface* surface, float* data, vec2 dimensions, vec3 origin, ivec2 numPoints);
 

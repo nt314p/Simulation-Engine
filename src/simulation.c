@@ -41,7 +41,7 @@ GLFWwindow* SimInitWindow(int width, int height, const char* title, int isFullsc
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED); // TODO: GLFW_CURSOR_DISABLED will break mouse position apparently
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     if (glewInit() != GLEW_OK)
     {

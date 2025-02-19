@@ -29,12 +29,14 @@ for file in os.listdir(directory):
     elif filename.endswith(".c"):
         output = subprocess.check_output(cFileCommand.replace("C_FILE", filename), shell=True,
             stderr=subprocess.STDOUT)
-
+    else:
+        continue
+    
     if (output == b''):
         print(f"Compiled '{filename}'")
     else:
         print(f"Compiled '{filename}' with output!\n")
-        print(output.decode('utf-8'))
+        print(output)
 
 tempFile.close()
 os.remove(tempFileName)

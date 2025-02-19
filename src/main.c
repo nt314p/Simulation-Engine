@@ -17,8 +17,8 @@
 #include "color.h"
 #include "physics.h"
 
-static const int WIDTH = 1920;
-static const int HEIGHT = 1080;
+static const int WIDTH = 1280;
+static const int HEIGHT = 720;
 
 static void ProcessInput(GLFWwindow* window, float deltaTime);
 
@@ -44,7 +44,7 @@ Surface s;
 
 GLFWwindow* Initialize()
 {
-    window = SimInitWindow(WIDTH, HEIGHT, "Viewer", true);
+    window = SimInitWindow(WIDTH, HEIGHT, "Viewer", false);
     if (window == NULL)
     {
         printf("Error!\n"); // TODO: handle this better
@@ -66,9 +66,11 @@ GLFWwindow* Initialize()
     //CameraUseOrthographic(((float)WIDTH) / HEIGHT, 10.0f);
 
     vec3 origin = { 0, 0, 0 };
-    // PolygonLine(origin, (vec3) { 1, 0, 0 }, COLOR_RED);
-    // PolygonLine(origin, (vec3) { 0, 1, 0 }, COLOR_GREEN);
-    // PolygonLine(origin, (vec3) { 0, 0, 1 }, COLOR_BLUE);
+    PolygonLine(origin, (vec3) { 1, 0, 0 }, COLOR_RED);
+    PolygonLine(origin, (vec3) { 0, 1, 0 }, COLOR_GREEN);
+    PolygonLine(origin, (vec3) { 0, 0, 1 }, COLOR_BLUE);
+
+    PolygonPoint((vec3) { 0, 1, 0 }, 2.0f, COLOR_BEIGE);
 
     int nX = 256;
     int nY = 256;
@@ -144,7 +146,7 @@ void Update(float deltaTime)
 
 void Render(float deltaTime)
 {
-    SurfaceDraw(&s);
+    //SurfaceDraw(&s);
 }
 
 static void ProcessInput(GLFWwindow* window, float deltaTime)
